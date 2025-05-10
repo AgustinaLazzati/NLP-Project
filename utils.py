@@ -9,7 +9,7 @@ def preprocess_text(text, keep_case=False):
         text = text.lower()
 
     # Remove asterisks
-    text = re.sub(r'\*+', '[REDACTED] ', text)
+    text = re.sub(r'\*+', 'REDACTED', text)
 
     # Normalize whitespace
     text = re.sub(r'\s+', ' ', text)
