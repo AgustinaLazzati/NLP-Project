@@ -1,0 +1,13 @@
+name: nlp_project
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pandas
+  - scikit-learn
+  - pip
+  - pip:
+      - spacy==3.8.5
+      - thinc==8.3.4
+      - sklearn-crfsuite

@@ -402,3 +402,32 @@ df_crf_unc_test = features_to_dataframe(
 )
 
 print(df_crf_unc_test.head())
+print("---------------------------------------")
+print("\n")
+
+# VISUALIZE DATA ---------------------------------------------------
+def print_sample_sentence(processed_data, doc_index=0, sent_index=0):
+    """
+    Print tokens and their corresponding negation/uncertainty cue and scope labels for a specific sentence.
+
+    Args:
+        processed_data: List of preprocessed documents
+        doc_index: Index of the document to inspect
+        sent_index: Index of the sentence within the document
+    """
+    sent = processed_data[doc_index]["sentences"][sent_index]
+    print(f"Document ID: {processed_data[doc_index]['doc_id']}")
+    print(f"Sentence {sent_index + 1}:\n{'-'*50}")
+    print(f"{'WORD':<15} {'NEG_CUE':<8} {'NEG_SCOPE':<10} {'UNC_CUE':<8} {'UNC_SCOPE'}")
+    print(f"{'-'*50}")
+    
+    for tok, nc, ns, uc, us in zip(
+        sent["tokens"], 
+        sent["neg_cue_labels"],
+        sent["neg_scope_labels"],
+        sent["unc_cue_labels"],
+        sent["unc_scope_labels"]
+    ):
+        print(f"{tok.text:<15} {nc:<8} {ns:<10} {uc:<8} {us}")
+
+print_sample_sentence(processed_train_data, doc_index=1, sent_index=2)
