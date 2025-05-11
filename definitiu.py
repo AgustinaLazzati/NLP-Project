@@ -3,6 +3,7 @@ import json
 import spacy
 from collections import defaultdict
 import re
+import pandas as pd
 
 # PREPROCESS DATA ----------------------------------------------------------
 
@@ -273,3 +274,46 @@ train_svm_feats_neg, train_svm_labels_neg, train_crf_feats_neg, train_crf_labels
 train_svm_feats_unc, train_svm_labels_unc, train_crf_feats_unc, train_crf_labels_unc = prepare_sequence_data_for_models(
     processed_train_data, lexicons_train, mode="uncertainty")
 
+# CONVERT DATA INTO DATAFRAMES ---------------------------------------------------
+
+def features_to_dataframe(features_list, labels_list=None, label_name="label"):
+
+    # Flatten features and add sentence/token IDs
+    flat_features = [token_feats for sent in features_list for token_feats in sent]
+    df = pd.DataFrame(flat_features)
+    
+    # Add sentence and token identifiers
+    df["sentence_id"] = [i for i, sent in enumerate(features_list) for _ in sent]
+    df["token_id"] = [j for sent in features_list for j in range(len(sent))]
+    
+    # Add labels if provided
+    if labels_list is not None:
+        flat_labels = [label for sent in labels_list for label in sent]
+        df[label_name] = flat_labels
+    
+    # Reorder columns to put IDs first
+    columns = ["sentence_id", "token_id"] + [col for col in df.columns if col not in ["sentence_id", "token_id", label_name]]
+    if labels_list is not None:
+        columns.append(label_name)
+    
+    return df[columns]
+
+# ---------SVM NEGATIONS------------
+
+df_svm_neg = features_to_dataframe(
+    features_list=train_svm_feats_neg,
+    labels_list=train_svm_labels_neg,
+    label_name="neg_cue_label"  
+)
+
+print(df_svm_neg.head())
+
+# ---------SVM UNCERTAINTIES------------
+
+df_crf_unc = features_to_dataframe(
+    features_list=train_crf_feats_unc,
+    labels_list=train_crf_labels_unc,
+    label_name="unc_scope_label"
+)
+
+print(df_crf_unc.head())
