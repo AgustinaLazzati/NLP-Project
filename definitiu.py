@@ -87,14 +87,18 @@ def preprocess_data(json_list):
                 
                 # Check if token is a negation cue or in scope
                 token_start = token.idx
-                token_end = token.idx + len(token.text)
-                
-                is_neg_cue = any(start <= token_start < end for start, end in neg_cues)
-                is_in_neg_scope = any(start <= token_start < end for start, end in neg_scopes)
-                is_unc_cue = any(start <= token_start < end for start, end in unc_cues)
-                is_in_unc_scope = any(start <= token_start < end for start, end in unc_scopes)
-                
-                sent_data["tokens"].append(token.text)
+                token_end = token.idx + len(token)
+
+                # Use overlap condition for all labels
+                def overlaps(start, end):
+                    return start < token_end and end > token_start
+
+                is_neg_cue = any(overlaps(start, end) for start, end in neg_cues)
+                is_in_neg_scope = any(overlaps(start, end) for start, end in neg_scopes)
+                is_unc_cue = any(overlaps(start, end) for start, end in unc_cues)
+                is_in_unc_scope = any(overlaps(start, end) for start, end in unc_scopes)
+
+                sent_data["tokens"].append(token)
                 sent_data["features"].append(features)
                 sent_data["neg_cue_labels"].append(1 if is_neg_cue else 0)
                 sent_data["neg_scope_labels"].append(1 if is_in_neg_scope else 0)
@@ -106,6 +110,23 @@ def preprocess_data(json_list):
         processed_data.append(doc_data)
     
     return processed_data
+
+def remove_false_negation_cues(processed_data, tokens_to_remove=None):
+    """
+    Set negation cue and scope labels to 0 for specific unwanted tokens (e.g. '.', ',', 'de', 'del').
+
+    Args:
+        processed_data: List of processed documents (from preprocess_data)
+        tokens_to_remove: Set or list of token texts to reset labels for
+    """
+    if tokens_to_remove is None:
+        tokens_to_remove = {'.', ',', ':', ';', 'de', 'del'}
+
+    for doc in processed_data:
+        for sent in doc["sentences"]:
+            for i, token in enumerate(sent["tokens"]):
+                if token.text.lower() in tokens_to_remove:
+                    sent["neg_cue_labels"][i] = 0
 
 
 def extract_lexicons(processed_data):
@@ -131,21 +152,21 @@ def extract_lexicons(processed_data):
             # Add negation cues to the lexicon
             for token, is_neg_cue in zip(sent["tokens"], sent["neg_cue_labels"]):
                 if is_neg_cue:
-                    neg_cues.add(token.lower())
+                    neg_cues.add(token.text.lower())
             
             # Add uncertainty cues to the lexicon
             for token, is_unc_cue in zip(sent["tokens"], sent["unc_cue_labels"]):
                 if is_unc_cue:
-                    unc_cues.add(token.lower())
+                    unc_cues.add(token.text.lower())
                 
             # Check for affixal cues (prefixes: a, anti, des, in, im; suffix: ment)
             for token in sent["tokens"]:
                 # Check if token is a negation cue or in scope
-                if token.lower() in neg_cues or token.lower() in unc_cues:
-                    single_word_cues.add(token.lower())
-                if token.lower().startswith(('a', 'anti', 'des', 'in', 'im')):
-                    affixal_cues.add(token[:2].lower())  # Add the prefix
-                elif token.lower().endswith('ment'):
+                if token.text.lower() in neg_cues or token.text.lower() in unc_cues:
+                    single_word_cues.add(token.text.lower())
+                if token.text.lower().startswith(('a', 'anti', 'des', 'in', 'im')):
+                    affixal_cues.add(token.text[:2].lower())  # Add the prefix
+                elif token.text.lower().endswith('ment'):
                     affixal_cues.add('ment')
     
     # Return lexicons, including negation and uncertainty cues, as well as affixal cues
@@ -156,81 +177,75 @@ def extract_lexicons(processed_data):
         "unc_cues": list(unc_cues)
     }
 
-def prepare_sequence_data_for_models(processed_data, lexicons):
+def prepare_sequence_data_for_models(processed_data, lexicons, mode="negation"):
     """
-    Prepare features and labels for both SVM and CRF models.
-    
-    Returns two sets of data:
-    - SVM data for cue detection (negation and uncertainty).
-    - CRF data for scope detection (negation and uncertainty scopes).
+    Prepare features and labels for SVM (cue detection) and CRF (scope detection).
+
+    Args:
+        processed_data: Output from preprocess_data()
+        lexicons: Lexicons dictionary (from extract_lexicons)
+        mode: Either 'negation' or 'uncertainty' to toggle which labels to use
+
+    Returns:
+        svm_features: List of per-sentence token features for SVM
+        svm_labels: List of per-sentence labels (cues) for SVM
+        crf_features: List of per-sentence token features for CRF
+        crf_labels: List of per-sentence labels (scopes) for CRF
     """
+    assert mode in {"negation", "uncertainty"}, "mode must be 'negation' or 'uncertainty'"
+
     svm_features = []
     svm_labels = []
-    crf_features = []
-    crf_labels = []
+    crf_features_list = []
+    crf_labels_list = []
+
+    cue_label_key = "neg_cue_labels" if mode == "negation" else "unc_cue_labels"
+    scope_label_key = "neg_scope_labels" if mode == "negation" else "unc_scope_labels"
 
     for doc in processed_data:
         for sent in doc["sentences"]:
-            sentence_tokens = sent["tokens"]
-            sentence_features = []
-            sentence_crf_features = []
+            tokens = sent["tokens"]
+            cue_labels = sent[cue_label_key]
+            scope_labels = sent[scope_label_key]
+
+            sentence_svm_features = []
             sentence_svm_labels = []
+            sentence_crf_features = []
             sentence_crf_labels = []
-            
-            for token, neg_cue_label, unc_cue_label, neg_scope_label, unc_scope_label in zip(
-                    sent["tokens"], sent["neg_cue_labels"], sent["unc_cue_labels"],
-                    sent["neg_scope_labels"], sent["unc_scope_labels"]):
-                
-                # Create features for SVM (cue detection)
-                features = {
-                    "word": token.lower(),
+
+            for token, cue_label, scope_label in zip(tokens, cue_labels, scope_labels):
+                # Common token features
+                word_lower = token.text.lower()
+                features_common = {
+                    "word": word_lower,
                     "lemma": token.lemma_.lower(),
                     "pos": token.pos_,
-                    "prefix": token.text[:3].lower(),
-                    "suffix": token.text[-3:].lower(),
+                    "prefix": word_lower[:3],
+                    "suffix": word_lower[-3:],
                     "is_punct": int(token.is_punct),
                     "is_redacted": int(bool(re.match(r'^\*+$', token.text))),
                     "dep": token.dep_,
                     "head_pos": token.head.pos_,
+                    "in_single_word_cues": int(word_lower in lexicons["single_word_cues"]),
+                    "in_affixal_cues": int(any(word_lower.startswith(prefix) for prefix in lexicons["affixal_cues"])),
+                    "ends_with_ment": int(word_lower.endswith("ment")),
                 }
 
-                # Add lexicon-based features for SVM
-                features["in_single_word_cues"] = int(token.lower() in lexicons["single_word_cues"])
-                features["in_affixal_cues"] = int(any(token.lower().startswith(prefix) for prefix in lexicons["affixal_cues"]))
-                features["ends_with_ment"] = int(token.lower().endswith("ment"))
-                
-                sentence_features.append(features)
-                sentence_svm_labels.append(neg_cue_label)  # APPEND `unc_cue_label` FOR UNCERTAINTY CUE DETECTION
-                
-                # Create features for CRF (scope detection)
-                crf_features = {
-                    "word": token.lower(),
-                    "lemma": token.lemma_.lower(),
-                    "pos": token.pos_,
-                    "prefix": token.text[:3].lower(),
-                    "suffix": token.text[-3:].lower(),
-                    "is_punct": int(token.is_punct),
-                    "is_redacted": int(bool(re.match(r'^\*+$', token.text))),
-                    # Add dependency features
-                    "dep": token.dep_,
-                    "head_pos": token.head.pos_,
-                }
+                # SVM (cue detection)
+                sentence_svm_features.append(features_common)
+                sentence_svm_labels.append(cue_label)
 
-                # Add lexicon-based features for CRF
-                crf_features["in_single_word_cues"] = int(token.lower() in lexicons["single_word_cues"])
-                crf_features["in_affixal_cues"] = int(any(token.lower().startswith(prefix) for prefix in lexicons["affixal_cues"]))
-                crf_features["ends_with_ment"] = int(token.lower().endswith("ment"))
-                
-                sentence_crf_features.append(crf_features)
-                sentence_crf_labels.append(neg_scope_label)  # APPEND `unc_scope_label` FOR UNCERTAINTY SCOPE DETECTION
+                # CRF (scope detection)
+                sentence_crf_features.append(features_common)
+                sentence_crf_labels.append(scope_label)
 
-            # Append sentence features and labels to document-level lists
-            svm_features.append(sentence_features)
+            svm_features.append(sentence_svm_features)
             svm_labels.append(sentence_svm_labels)
-            crf_features.append(sentence_crf_features)
-            crf_labels.append(sentence_crf_labels)
+            crf_features_list.append(sentence_crf_features)
+            crf_labels_list.append(sentence_crf_labels)
 
-    return svm_features, svm_labels, crf_features, crf_labels
+    return svm_features, svm_labels, crf_features_list, crf_labels_list
+
 
 # MAIN ----------------------------------------------------------
 
@@ -244,10 +259,17 @@ with open('negacio_test_v2024.json') as f:
 processed_train_data = preprocess_data(json_train_data)
 processed_test_data = preprocess_data(json_test_data)
 
+remove_false_negation_cues(processed_train_data)
+remove_false_negation_cues(processed_test_data)
+
 # Extract lexicons
 lexicons_train = extract_lexicons(processed_train_data)
 lexicons_test = extract_lexicons(processed_test_data)
 
 # Prepare sequence data and labels for the different models
-train_features_svm, train_labels_svm, train_features_crf, train_labels_crf = prepare_sequence_data_for_models(processed_train_data, lexicons_train)
-test_features_svm, test_labels_svm, test_features_crf, test_features_crf = prepare_sequence_data_for_models(processed_test_data, lexicons_test)
+train_svm_feats_neg, train_svm_labels_neg, train_crf_feats_neg, train_crf_labels_neg = prepare_sequence_data_for_models(
+    processed_train_data, lexicons_train, mode="negation")
+
+train_svm_feats_unc, train_svm_labels_unc, train_crf_feats_unc, train_crf_labels_unc = prepare_sequence_data_for_models(
+    processed_train_data, lexicons_train, mode="uncertainty")
+
