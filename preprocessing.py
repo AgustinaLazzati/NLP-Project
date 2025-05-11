@@ -5,7 +5,7 @@ from collections import defaultdict
 import re
 import pandas as pd
 
-# PREPROCESS DATA ----------------------------------------------------------
+# DEFINE SOME FUNCTIONS TO PREPROCESS DATA ----------------------------------------------------------
 
 # Load Spanish language model
 nlp = spacy.load("es_core_news_sm")
@@ -248,7 +248,7 @@ def prepare_sequence_data_for_models(processed_data, lexicons, mode="negation"):
     return svm_features, svm_labels, crf_features_list, crf_labels_list
 
 
-# MAIN ----------------------------------------------------------
+# OBTAIN AND PREPROCESS DATA ----------------------------------------------------------
 
 with open('negacio_train_v2024.json') as f:
     json_train_data = json.load(f)
@@ -268,11 +268,22 @@ lexicons_train = extract_lexicons(processed_train_data)
 lexicons_test = extract_lexicons(processed_test_data)
 
 # Prepare sequence data and labels for the different models
+
+# Train features and labels for -negations-
 train_svm_feats_neg, train_svm_labels_neg, train_crf_feats_neg, train_crf_labels_neg = prepare_sequence_data_for_models(
     processed_train_data, lexicons_train, mode="negation")
 
+# Train features and labels for -uncertainties-
 train_svm_feats_unc, train_svm_labels_unc, train_crf_feats_unc, train_crf_labels_unc = prepare_sequence_data_for_models(
     processed_train_data, lexicons_train, mode="uncertainty")
+
+# Tests features and labels for -negations-
+test_svm_feats_neg, test_svm_labels_neg, test_crf_feats_neg, test_crf_labels_neg = prepare_sequence_data_for_models(
+    processed_test_data, lexicons_test, mode="negation")
+
+# Tests features and labels for -uncertainties-
+test_svm_feats_unc, test_svm_labels_unc, test_crf_feats_unc, test_crf_labels_unc = prepare_sequence_data_for_models(
+    processed_test_data, lexicons_test, mode="uncertainty")
 
 # CONVERT DATA INTO DATAFRAMES ---------------------------------------------------
 
@@ -300,20 +311,94 @@ def features_to_dataframe(features_list, labels_list=None, label_name="label"):
 
 # ---------SVM NEGATIONS------------
 
-df_svm_neg = features_to_dataframe(
+# Train data
+df_svm_neg_train = features_to_dataframe(
     features_list=train_svm_feats_neg,
     labels_list=train_svm_labels_neg,
     label_name="neg_cue_label"  
 )
 
-print(df_svm_neg.head())
+print(df_svm_neg_train.head())
+print("---------------------------------------")
+print("\n")
+
+# Test data
+df_svm_neg_test = features_to_dataframe(
+    features_list=test_svm_feats_neg,
+    labels_list=test_svm_labels_neg,
+    label_name="neg_cue_label"  
+)
+
+print(df_svm_neg_test.head())
+print("---------------------------------------")
+print("\n")
 
 # ---------SVM UNCERTAINTIES------------
 
-df_crf_unc = features_to_dataframe(
+# Train data
+df_svm_unc_train = features_to_dataframe(
+    features_list=train_svm_feats_unc,
+    labels_list=train_svm_labels_unc,
+    label_name="unc_cue_label"  
+)
+
+print(df_svm_unc_train.head())
+print("---------------------------------------")
+print("\n")
+
+# Test data
+df_svm_unc_test = features_to_dataframe(
+    features_list=train_svm_feats_unc,
+    labels_list=train_svm_labels_unc,
+    label_name="unc_cue_label"  
+)
+
+print(df_svm_unc_test.head())
+print("---------------------------------------")
+print("\n")
+
+# ---------CRF NEGATIONS----------------
+
+# Train data
+df_crf_neg_train = features_to_dataframe(
+    features_list=train_crf_feats_neg,
+    labels_list=train_crf_labels_neg,
+    label_name="neg_scope_label"  
+)
+
+print(df_crf_neg_train.head())
+print("---------------------------------------")
+print("\n")
+
+# Test data
+df_crf_neg_test = features_to_dataframe(
+    features_list=test_crf_feats_neg,
+    labels_list=test_crf_labels_neg,
+    label_name="neg_scope_label"  
+)
+
+print(df_crf_neg_test)
+print("---------------------------------------")
+print("\n")
+
+# ---------CRF UNCERTAINTIES------------
+
+# Train data
+df_crf_unc_train = features_to_dataframe(
     features_list=train_crf_feats_unc,
     labels_list=train_crf_labels_unc,
     label_name="unc_scope_label"
 )
 
-print(df_crf_unc.head())
+print(df_crf_unc_train.head())
+print("---------------------------------------")
+print("\n")
+
+# Test data
+df_crf_unc_test = features_to_dataframe(
+    features_list=test_crf_feats_unc,
+    labels_list=test_crf_labels_unc,
+    label_name="unc_scope_label"
+)
+
+print(df_crf_unc_test.head())
