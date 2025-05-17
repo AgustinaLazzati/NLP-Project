@@ -6,6 +6,7 @@ dependencies:
   - python=3.11
   - pandas
   - scikit-learn
+  - matplotlib
   - pip
   - pip:
       - spacy==3.8.5
