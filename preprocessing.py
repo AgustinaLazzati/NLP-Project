@@ -348,8 +348,8 @@ print("\n")
 
 # Test data
 df_svm_unc_test = features_to_dataframe(
-    features_list=train_svm_feats_unc,
-    labels_list=train_svm_labels_unc,
+    features_list=test_svm_feats_unc,
+    labels_list=test_svm_labels_unc,
     label_name="unc_cue_label"  
 )
 
