@@ -412,6 +412,8 @@ df_crf_neg_train.to_csv('df_neg_scopes_train.csv', index=False)
 df_crf_neg_test.to_csv('df_neg_scopes_test.csv', index=False)
 df_svm_neg_train.to_csv('df_neg_cues_train.csv', index=False)
 df_svm_unc_train.to_csv('df_unc_cues_train.csv', index=False)
+df_svm_neg_test.to_csv('df_neg_cues_test.csv', index=False)
+df_svm_unc_test.to_csv('df_unc_cues_test.csv', index=False)
 
 # VISUALIZE DATA ---------------------------------------------------
 def print_sample_sentence(processed_data, doc_index=0, sent_index=0):
