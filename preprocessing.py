@@ -248,6 +248,28 @@ def prepare_sequence_data_for_models(processed_data, lexicons, mode="negation"):
     return svm_features, svm_labels, crf_features_list, crf_labels_list
 
 
+def prepare_lstm_data(processed_data, label_type="neg_cue_labels"):
+    """
+    Converts processed_data into token-label pairs for BiLSTM training.
+
+    Args:
+        processed_data: List of documents (from preprocess_data)
+        label_type: One of 'neg_cue_labels', 'neg_scope_labels', 'unc_cue_labels', 'unc_scope_labels'
+
+    Returns:
+        List of (tokens, labels) tuples per sentence
+    """
+    lstm_data = []
+
+    for doc in processed_data:
+        for sent in doc["sentences"]:
+            tokens = [token.text for token in sent["tokens"]]
+            labels = sent[label_type]
+            lstm_data.append((tokens, labels))
+
+    return lstm_data
+
+
 # OBTAIN AND PREPROCESS DATA ----------------------------------------------------------
 
 with open('negacio_train_v2024.json') as f:
@@ -284,6 +306,37 @@ test_svm_feats_neg, test_svm_labels_neg, test_crf_feats_neg, test_crf_labels_neg
 # Tests features and labels for -uncertainties-
 test_svm_feats_unc, test_svm_labels_unc, test_crf_feats_unc, test_crf_labels_unc = prepare_sequence_data_for_models(
     processed_test_data, lexicons_test, mode="uncertainty")
+
+# Train data (negation) for LSTM
+lstm_train_data_neg_cue = prepare_lstm_data(processed_train_data, "neg_cue_labels")
+lstm_train_data_neg_scope = prepare_lstm_data(processed_train_data, "neg_scope_labels")
+# Test data (negation) for LSTM
+lstm_test_data_neg_cue = prepare_lstm_data(processed_test_data, "neg_cue_labels")
+lstm_test_data_neg_scope = prepare_lstm_data(processed_test_data, "neg_scope_labels")
+# Train data (uncertainty) for LSTM
+lstm_train_data_unc_cue = prepare_lstm_data(processed_train_data, "unc_cue_labels")
+lstm_train_data_unc_scope = prepare_lstm_data(processed_train_data, "unc_scope_labels")
+# Test data (uncertainty) for LSTM
+lstm_test_data_unc_cue = prepare_lstm_data(processed_test_data, "unc_cue_labels")
+lstm_test_data_unc_scope = prepare_lstm_data(processed_test_data, "unc_scope_labels")
+
+# SAVE DATA INTO FILES ----------------------------------------------------------
+import pickle
+
+data_dict = {
+    "lstm_train_data_neg_cue": lstm_train_data_neg_cue,
+    "lstm_train_data_neg_scope": lstm_train_data_neg_scope,
+    "lstm_test_data_neg_cue": lstm_test_data_neg_cue,
+    "lstm_test_data_neg_scope": lstm_test_data_neg_scope,
+    "lstm_train_data_unc_cue": lstm_train_data_unc_cue,
+    "lstm_train_data_unc_scope": lstm_train_data_unc_scope,
+    "lstm_test_data_unc_cue": lstm_test_data_unc_cue,
+    "lstm_test_data_unc_scope": lstm_test_data_unc_scope,
+}
+
+with open("lstm_data.pkl", "wb") as f:
+    pickle.dump(data_dict, f)
+
 
 # CONVERT DATA INTO DATAFRAMES ---------------------------------------------------
 
@@ -406,6 +459,7 @@ print("---------------------------------------")
 print("\n")
 
 # Save DataFrame to a CSV file
+"""
 df_crf_unc_test.to_csv('df_unc_scopes_test.csv', index=False)
 df_crf_unc_train.to_csv('df_unc_scopes_train.csv', index=False)
 df_crf_neg_train.to_csv('df_neg_scopes_train.csv', index=False)
@@ -414,6 +468,8 @@ df_svm_neg_train.to_csv('df_neg_cues_train.csv', index=False)
 df_svm_unc_train.to_csv('df_unc_cues_train.csv', index=False)
 df_svm_neg_test.to_csv('df_neg_cues_test.csv', index=False)
 df_svm_unc_test.to_csv('df_unc_cues_test.csv', index=False)
+"""
+
 
 # VISUALIZE DATA ---------------------------------------------------
 def print_sample_sentence(processed_data, doc_index=0, sent_index=0):
